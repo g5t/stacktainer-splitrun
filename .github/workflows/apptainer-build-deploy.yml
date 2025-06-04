@@ -36,6 +36,6 @@ jobs:
         uses: uw-psych/apptainer-actions/build-and-push@main
         with:
           deffile: image.def
-          build-args-file: build.args
+          build-arg-file: build.args
           image-version: ${{ env.IMAGE_VERSION }}
           
