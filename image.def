@@ -1,0 +1,90 @@
+Bootstrap: oras
+From: ghcr.io/g5t/stack-tainer-ecdc/stack-tainer-ecdc:{{ version }}
+
+%arguments
+plumber_version="0.8.1"
+
+
+%files
+entrypoint-writer.sh /usr/bin/launch-writer
+entrypoint-forwarder.sh /usr/bin/launch-forwarder
+
+
+%post
+apt -y update
+apt -y install git python3-packaging python3-yaml
+python3 -m pip install --break-system-packages "mccode-plumber=={{ plumber_version }}"
+chmod +x /usr/bin/launch-writer
+chmod +x /usr/bin/launch-forwarder
+apt -y autoremove
+apt clean
+
+%environment
+export LC_ALL=C
+
+%labels
+Version 1.0
+
+%help
+Data collection utilities for the European Spallation Source.
+Event Formation Unit binaries:
+	bifrost  - the indirect geometry time-of-flight spectrometer, BIFROST
+	cbm      - beam monitors used a multiple instruments
+	cspec    - the direct geometry time-of-flight spectrometer, CSPEC
+	dream    - the powder diffractometer, DREAM
+	freia    - the reflectometer, FREIA
+	loki     - the small angle scattering diffractometer, LOKI
+	miracles - the back scattering time-of-flight spectrometer, MIRACLES
+	nmx      - the macromollecular single crystal diffractometer, NMX
+	timepix3 - the TimePix3 clustering photon imaging detector, used at ODIN
+	trex     - the direct geometry time-of-flight spectrometer, TREX
+File Writer binaries:
+	kafkfa-to-nexus - the worker responsible for writing streams to NeXus files
+McCode Plumber programs:
+	mc-epics              - Configure and run an EPICS mailbox server to host instrument setting parameter value updates 
+	mp-epics-update       - Send 'key value' pair updates to a running EPICS mailbox server
+	mp-forwarder-setup    - Inform the Forwarder which instrument setting parameters should be forwarded to Kafka
+	mp-forwarder-teardown - Inform the Forwarder to stop sending instrument setting parameter updates
+	mp-insert-hdf5-instr  - Add a serialized form of the provided instrument to a new or existing HDF5 file
+	mp-register-topics    - Ensure that the specified stream topic names exist on a configurable Kafka service
+	mp-splitrun           - Use 'restage.splitrun' with McCode histogram (monitor) sending callbacks for Kafka integration
+	mp-writer-from        - Print the current time as needed to specify, e.g., the start time in a call to 'mp-writer-write'
+	mp-writer-kill        - Send a File Writer command to stop a specified job
+	mp-writer-killall     - Send a File Writer command to stop all jobs
+	mp-writer-list        - List known File Writer jobs
+	mp-writer-wait        - Sleep until the specified File Writer job has finished
+	mp-writer-write       - Send a File Writer command to start a job, controlling start and optionally stop time
+Utilities:
+	launch-writer    - create a new kafka-to-nexus file writer, optionally using some sensible defaults
+	launch-forwarder - create a EPICS to Kafka forwarder, optionally using some sensible defaults
+	
+
+%test
+test_result=0
+for binary in bifrost cbm cspec dream freia loki miracles nmx timepix3 trex; do
+  echo -n "Checking for correct ${binary} version (${EFU_VERSION}) ... "
+  if ($binary --version | grep -q "${EFU_VERSION}"); then
+    echo "success!"
+  else
+    echo "failure!"
+    test_result=1
+  fi  
+done
+for binary in kafka-to-nexus; do
+  echo -n "Checking for correct ${binary} version (${FILEWRITER_VERSION}) ... "
+  if ($binary --version | grep -q "${FILEWRITER_VERSION}"); then
+    echo "success!"
+  else
+    echo "failure!"
+    test_result=1
+  fi  
+done
+for binary in file-maker template-maker; do
+  echo -n "Checking whether ${binary} provides '--help' ... "
+  returned=$("$binary" --help)
+  exitcode=$?
+  test $exitcode -eq 0 && echo "yes!" || echo "no!"
+  test_result=$exitcode||$test_result
+done
+exit ${test_result}
+

@@ -1,0 +1,38 @@
+name: Apptainer Build Deploy
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+
+jobs:
+  build-container:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    name: Build and Deploy 'Tainer
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Install Apptainer
+        uses: uw-psych/apptainer-actions/setup@main
+      
+      - name: Clear disk space
+        uses: uw-psych/apptainer-actions/make-disk-space@main
+
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set tag
+        shell: bash
+        run: |
+          echo "IMAGE_VERSION=${GITHUB_REF_NAME#v}" >> "${GITHUB_ENV}"
+
+      - name: Build and push image
+        uses: uw-psych/apptainer-actions/build-and-push@main
+        with:
+          deffile: image.def
+          build-args: version=${{ env.IMAGE_VERSION }}
+          image-version: ${{ env.IMAGE_VERSION }}
+          
