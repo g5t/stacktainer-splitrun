@@ -2,7 +2,7 @@ Bootstrap: oras
 From: ghcr.io/g5t/stack-tainer-ecdc/stack-tainer-ecdc:{{ version }}
 
 %arguments
-plumber_version="0.8.1"
+plumber_version="0.8.2"
 
 
 %files
@@ -21,6 +21,7 @@ apt clean
 
 %environment
 export LC_ALL=C
+export RESTAGE_FIXED=${RESTAGE_FIXED:-''}
 
 %labels
 Version 1.0
