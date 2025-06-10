@@ -8,11 +8,13 @@ plumber_version="0.8.2"
 %files
 entrypoint-writer.sh /usr/bin/launch-writer
 entrypoint-forwarder.sh /usr/bin/launch-forwarder
+splitrun-nexus-impl.sh /usr/bin/splitrun-nexus-impl
+splitrun-nexus.sh /usr/bin/splitrun-nexus
 
 
 %post
 apt -y update
-apt -y install git python3-packaging python3-yaml
+apt -y install git python3-packaging python3-yaml uuid
 python3 -m pip install --break-system-packages "mccode-plumber=={{ plumber_version }}"
 chmod +x /usr/bin/launch-writer
 chmod +x /usr/bin/launch-forwarder
