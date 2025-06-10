@@ -1,16 +1,5 @@
 #!/usr/bin/env bash
 
-# check if the expected containers are running:
-declare -A containers
-for i in $(podman ps --format '{{.Names}}'); do
-  containers[$i]=1
-done
-for expected in kafka forwarder writer efu; do
-  if [ ! ${containers[$expected]} ]; then
-    echo "Expected container '${expected}' to be running"
-    exit 1
-  fi
-done
 # Stash the location of _this_ script file to know where the implementation resides
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
@@ -85,6 +74,5 @@ if ${IMPL} "${IMPL_PARAMS[@]}" -- "${INSTRUMENT_FILE}" ${ARGUMENTS}; then
     echo "${INSTRUMENT_DIR}/${filename} does not exist. File writer failed."
   fi
 else
-  echo "Impl did not finish. After kafka-to-nexus exits examine output file in-container"
-  echo "    'podman exec writer ls \"/output/${filename}\"'"
+  echo "Impl did not finish. After kafka-to-nexus exits examine output file ${INSTRUMENT_DIR}/${filename}"
 fi
