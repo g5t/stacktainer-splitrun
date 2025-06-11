@@ -25,8 +25,8 @@ if [[ ${PIPESTATUS[0]} -ne 4 ]]; then
 fi
 
 # {option}: == one required argument
-OPTIONS=broker:,config:,status:,help:
-SHORT_OPTIONS=b:,c:,s:,h:
+OPTIONS=broker:,config:,status:,help
+SHORT_OPTIONS=b:,c:,s:,h
 ! PARSED=$(getopt --options=$SHORT_OPTIONS --longoptions=$OPTIONS --name "$0" -- "$@")
 if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
   # getopt complained bout wrong arguments to stdout
@@ -44,13 +44,15 @@ while true; do
     -c|--config) config="$2"; shift 2 ;;
     -s|--status) status="$2"; shift 2 ;;
     -h|--help)
-      echo "usage: $0 [options]"
-      echo "options:"
+      echo "usage: $0 [flags] [options]"
+      echo "flags:"
       echo "  -h --help     print this help and exit"
+      echo "options:"
       echo "  -b --broker   Kafka broker in {hostname}:{port} format, default='localhost:9092'"
-      echo "  -c --config   forward configuration topic, default='ForwardConfig'"
-      echo "  -s --status   forward status topic, default='ForwardStatus'"
-      exit
+      echo "  -c --config   forward configuration topic,              default='ForwardConfig'"
+      echo "  -s --status   forward status topic,                     default='ForwardStatus'"
+      exit 0
+    ;;
     --) shift; break ;;
     *) echo "Programming error"; exit 3 ;;
   esac

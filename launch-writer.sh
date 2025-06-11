@@ -20,8 +20,8 @@ set -m -o errexit -o noclobber -o nounset
 # getopt exists but has slightly different syntax
 
 # {option}: == one required argument
-OPTIONS=broker:,work:,prefix:,command:,job:,help:
-SHORT_OPTIONS=b:,w:,c:,j:,h:
+OPTIONS=broker:,work:,prefix:,command:,job:,help
+SHORT_OPTIONS=b:,w:,c:,j:,h
 PARSED=$(getopt -o $SHORT_OPTIONS -l $OPTIONS -- "$@") || exit 1
 eval set -- "$PARSED"
 
@@ -36,14 +36,16 @@ while true; do
     -c|--command) writer_command="$2"; shift 2 ;;
     -j|--job) writer_job="$2"; shift 2 ;;
     -h|--help)
-      echo "usage: $0 [options]"
-      echo "options:"
+      echo "usage: $0 [flags] [options]"
+      echo "flags:"
       echo "  -h --help     print this help and exit"
-      echo "  -b --broker   Kafka broker in {hostname}:{port} format, default='localhost:9092'"
+      echo "options:"
+      echo "  -b --broker   Kafka broker in {hostname}:{port} format,        default='localhost:9092'"
       echo "  -w --work     The working directory to use for output file(s), default=\$PWD"
-      echo "  -c --command  writer command topic, default='WriterCommand'"
-      echo "  -j --job      writer job topic, default='WriterJob'"
-      exit
+      echo "  -c --command  writer command topic,                            default='WriterCommand'"
+      echo "  -j --job      writer job topic,                                default='WriterJob'"
+      exit 0
+    ;;
     --) shift; break ;;
     *) echo "Programming error"; exit 3 ;;
   esac
