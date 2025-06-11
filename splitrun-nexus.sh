@@ -29,7 +29,9 @@ case "${lower_instrument}" in
   bifrost)
     { [ -z "${EFU_CONFIG+x}" ] || [ -z "${EFU_CONFIG}" ]; } && efu_config="/etc/efu/bifrost/configs/bifrost.json" || efu_config="${EFU_CONFIG}"
     { [ -z "${EFU_CALIB+x}" ] || [ -z "${EFU_CALIB}" ]; } && efu_calib="/etc/efu/bifrost/configs/bifrostnullcalib.json" || efu_calib="${EFU_CALIB}"
-    EFU_COMMAND="bifrost -f ${efu_config} --calibration ${efu_calib}"
+    { [ -z "${EFU_CMD_PORT+x}" ] || [ -z "${EFU_CMD_PORT}" ]; } && efu_cmd_port="$(ephemeral-port-reserve)" || efu_cmd_port="${EFU_CMD_PORT}"
+    # Also use an ephemeral port number for the EFU UDP receiving port?
+    EFU_COMMAND="bifrost -f ${efu_config} --calibration ${efu_calib} --cmdport ${efu_cmd_port}"
     ;;
   cspec | dream | freia | loki | miracles | nmx | trex) 
     echo "Untested splitrun for ${INSTRUMENT} -- setting EFU configuration paremeters is necessary"
