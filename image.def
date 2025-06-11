@@ -1,16 +1,16 @@
 Bootstrap: oras
-From: ghcr.io/g5t/stack-tainer-ecdc/stack-tainer-ecdc:{{ version }}
+From: ghcr.io/g5t/stack-tainer-ecdc/stack-tainer-ecdc:1.2
 
 %labels
-Version 1.2
+Version 1.2.1
 
 %arguments
 plumber_version="0.8.2"
 
 
 %files
-entrypoint-writer.sh /usr/bin/launch-writer
-entrypoint-forwarder.sh /usr/bin/launch-forwarder
+launch-writer.sh /usr/bin/launch-writer
+launch-forwarder.sh /usr/bin/launch-forwarder
 splitrun-nexus-impl.sh /usr/bin/splitrun-nexus-impl
 splitrun-nexus.sh /usr/bin/splitrun-nexus
 
