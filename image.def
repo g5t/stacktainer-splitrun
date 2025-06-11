@@ -1,6 +1,9 @@
 Bootstrap: oras
 From: ghcr.io/g5t/stack-tainer-ecdc/stack-tainer-ecdc:{{ version }}
 
+%labels
+Version 1.2
+
 %arguments
 plumber_version="0.8.2"
 
@@ -24,9 +27,6 @@ apt clean
 %environment
 export LC_ALL=C
 export RESTAGE_FIXED=${RESTAGE_FIXED:-''}
-
-%labels
-Version 1.0
 
 %help
 Data collection utilities for the European Spallation Source.

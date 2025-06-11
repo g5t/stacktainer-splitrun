@@ -27,8 +27,8 @@ lower_instrument="${INSTRUMENT,,}"
 EFU_COMMAND=""
 case "${lower_instrument}" in
   bifrost)
-    { [ -z "${EFU_CONFIG+x}" ] || [ -z "${EFU_CONFIG}" ]; } && efu_config="/usr/share/efu/bifrost/configs/bifrost.json" || efu_config="${EFU_CONFIG}"
-    { [ -z "${EFU_CALIB+x}" ] || [ -z "${EFU_CALIB}" ]; } && efu_calib="/usr/share/efu/bifrost/configs/bifrostnullcalib.json" || efu_calib="${EFU_CALIB}"
+    { [ -z "${EFU_CONFIG+x}" ] || [ -z "${EFU_CONFIG}" ]; } && efu_config="/etc/efu/bifrost/configs/bifrost.json" || efu_config="${EFU_CONFIG}"
+    { [ -z "${EFU_CALIB+x}" ] || [ -z "${EFU_CALIB}" ]; } && efu_calib="/etc/efu/bifrost/configs/bifrostnullcalib.json" || efu_calib="${EFU_CALIB}"
     EFU_COMMAND="bifrost -f ${efu_config} --calibration ${efu_calib}"
     ;;
   cspec | dream | freia | loki | miracles | nmx | trex) 
