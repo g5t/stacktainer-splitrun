@@ -1,9 +1,6 @@
 Bootstrap: oras
 From: ghcr.io/g5t/stack-tainer-ecdc/stack-tainer-ecdc:1.2
 
-%labels
-Version {{ version }}
-
 %arguments
 plumber_version="0.8.2"
 
@@ -26,7 +23,6 @@ apt clean
 
 %environment
 export LC_ALL=C
-export SPLITRUN_TAINER_VERSION={{ version }}
 export RESTAGE_FIXED=${RESTAGE_FIXED:-''}
 
 %help
