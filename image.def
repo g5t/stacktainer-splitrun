@@ -14,7 +14,7 @@ splitrun-nexus.sh /usr/bin/splitrun-nexus
 
 %post
 apt -y update
-apt -y install git python3-packaging python3-yaml uuid
+apt -y install git python3-packaging python3-yaml python3-ephemeral-port-reserve uuid
 python3 -m pip install --break-system-packages "mccode-plumber=={{ plumber_version }}"
 chmod +x /usr/bin/launch-writer
 chmod +x /usr/bin/launch-forwarder
