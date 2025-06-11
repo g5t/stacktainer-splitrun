@@ -1,5 +1,5 @@
 Bootstrap: oras
-From: ghcr.io/g5t/stack-tainer-ecdc/stack-tainer-ecdc:1.2
+From: ghcr.io/g5t/stack-tainer-ecdc/stack-tainer-ecdc:1.3
 
 %arguments
 plumber_version="0.8.2"
