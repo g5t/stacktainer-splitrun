@@ -64,14 +64,18 @@ fi
 mp-register-topics --broker "${broker}" "${writer_command}" "${writer_job}"
 
 # Get the list of known writers, just for logging purposes -- the two URIs are required even though they are not used
-kafka-to-nexus --list_modules --command-status-uri "${broker}/${writer_command}" --job-pool-uri "${broker}/${writer_job}"
+# !!! the --list_modules flag was removed at some point. I guess no tagged versions means no API stability.
+# kafka-to-nexus --list_modules --command-status-uri "${broker}/${writer_command}" --job-pool-uri "${broker}/${writer_job}"
+
 # Start a file writer
-kafka-to-nexus --command-status-uri "${broker}/${writer_command}" \
-               --job-pool-uri "${broker}/${writer_job}" \
-               --hdf-output-prefix="${work_dir}/"\
-               --verbosity trace \
-               --kafka-error-timeout 10s\
-               --kafka-poll-timeout 1s\
-               --kafka-metadata-max-timeout 10s
-               #--kafka-config consumer.timeout.ms 20000
+kafka-to-nexus \ 
+  --brokers "${broker}"\
+  --command-status-topic "${writer_command}"\
+  --job-pool-topic "${writer_job}"\
+  --hdf-output-prefix="${work_dir}/"\
+  --verbosity trace \
+  --kafka-error-timeout 10s\
+  --kafka-poll-timeout 1s\
+  --kafka-metadata-max-timeout 10s
+  #--kafka-config consumer.timeout.ms 20000
 
