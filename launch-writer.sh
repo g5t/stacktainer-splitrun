@@ -16,9 +16,6 @@
 # Allow this bash script to use job controls:
 set -m -o errexit -o noclobber -o nounset
 
-# (Maybe bad) specialize this script to work under BusyBox where bash is not available
-# getopt exists but has slightly different syntax
-
 # {option}: == one required argument
 OPTIONS=broker:,work:,prefix:,command:,job:,help
 SHORT_OPTIONS=b:,w:,c:,j:,h
@@ -68,7 +65,7 @@ mp-register-topics --broker "${broker}" "${writer_command}" "${writer_job}"
 # kafka-to-nexus --list_modules --command-status-uri "${broker}/${writer_command}" --job-pool-uri "${broker}/${writer_job}"
 
 # Start a file writer
-kafka-to-nexus \ 
+kafka-to-nexus \
   --brokers "${broker}"\
   --command-status-topic "${writer_command}"\
   --job-pool-topic "${writer_job}"\
