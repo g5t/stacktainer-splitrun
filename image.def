@@ -1,5 +1,5 @@
 Bootstrap: oras
-From: ghcr.io/g5t/stack-tainer-ecdc/stack-tainer-ecdc:1.3
+From: ghcr.io/g5t/stack-tainer-ecdc/stack-tainer-ecdc:2.1
 
 %arguments
 plumber_version="0.8.2"
@@ -13,13 +13,11 @@ splitrun-nexus.sh /usr/bin/splitrun-nexus
 
 
 %post
-apt -y update
-apt -y install git python3-packaging python3-yaml python3-ephemeral-port-reserve uuid
-python3 -m pip install --break-system-packages "mccode-plumber=={{ plumber_version }}"
-chmod +x /usr/bin/launch-writer
-chmod +x /usr/bin/launch-forwarder
-apt -y autoremove
-apt clean
+dnf install -y git uuid python3.12-pyyaml
+# apt -y install git python3-packaging python3-yaml python3-ephemeral-port-reserve uuid
+python -m pip install --break-system-packages ephemeral-port-reserve "mccode-plumber=={{ plumber_version }}"
+chmod +x /usr/bin/launch-writer /usr/bin/launch-forwarder /usr/bin/splitrun-nexus /usr/bin/splitrun-nexus-impl
+dnf clean all
 
 %environment
 export LC_ALL=C
@@ -60,31 +58,35 @@ Utilities:
 	
 
 %test
+function test_revision(){
+  expected="$2"
+  for b in "${@:3}"
+  do
+    echo -n "Check $b version ... "
+    res=$($b --version)
+    if (echo $res | grep -q "${expected}")
+    then
+       echo "success!"
+    else
+       echo "${expected} not in $res"
+       return 1
+    fi
+  done
+}
+function test_help(){
+  res=0
+  for b in "${@}"
+  do
+    echo -n "Check that ${b} provides '--help' ... "
+    ret=$($b --help)
+    exc=$?
+    test $exc -eq 0 && echo "yes!" || echo "no!"
+    res=$exc||$res
+  done
+  return $res
+}
 test_result=0
-for binary in bifrost cbm cspec dream freia loki miracles nmx timepix3 trex; do
-  echo -n "Checking for correct ${binary} version (${EFU_VERSION}) ... "
-  if ($binary --version | grep -q "${EFU_VERSION}"); then
-    echo "success!"
-  else
-    echo "failure!"
-    test_result=1
-  fi  
-done
-for binary in kafka-to-nexus; do
-  echo -n "Checking for correct ${binary} version (${FILEWRITER_VERSION}) ... "
-  if ($binary --version | grep -q "${FILEWRITER_VERSION}"); then
-    echo "success!"
-  else
-    echo "failure!"
-    test_result=1
-  fi  
-done
-for binary in file-maker template-maker; do
-  echo -n "Checking whether ${binary} provides '--help' ... "
-  returned=$("$binary" --help)
-  exitcode=$?
-  test $exitcode -eq 0 && echo "yes!" || echo "no!"
-  test_result=$exitcode||$test_result
-done
+test_revision $(echo ${EFU_VERSION} | tr '-' ' ')  bifrost cbm cspec dream freia loki miracles nmx timepix3 trex || test_result=1
+test_revision $(echo ${WRITER_VERSION} | tr '-' ' ') kafka-to-nexus || test_result=1
+test_help file-maker template-maker || test_result=1
 exit ${test_result}
-
