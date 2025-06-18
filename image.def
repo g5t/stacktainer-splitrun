@@ -2,7 +2,7 @@ Bootstrap: oras
 From: ghcr.io/g5t/stack-tainer-ecdc/stack-tainer-ecdc:2.1
 
 %arguments
-plumber_version="0.8.2"
+plumber_version="0.9.0"
 
 
 %files
