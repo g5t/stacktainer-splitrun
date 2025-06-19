@@ -23,12 +23,13 @@ python -m pip install \
   "mcpl=={{ mcpl_version }}"
 chmod +x /usr/bin/launch-writer /usr/bin/launch-forwarder /usr/bin/splitrun-nexus /usr/bin/splitrun-nexus-impl
 dnf clean all
+echo "export MCCODEANTLR_FLAGS__MCPL='$(mcpl-config --show buildflags)'" >> $APPTAINER_ENVIRONMENT
+echo "export MCCODEANTLR_FLAGS__NCRYSTAL='$(ncrystal-config --show buildflags)'" >> $APPTAINER_ENVIRONMENT
 
 %environment
 export LC_ALL=C
 export RESTAGE_FIXED=${RESTAGE_FIXED:-''}
-export MCCODEANTLR_FLAGS__MCPL="$(mcpl-config --show buildflags)"
-export MCCODEANTLR_FLAGS__NCRYSTAL="$(ncrystal-config --show buildflags)"
+export MCCODEANTLR_MCCODE_POOCH__TAG="v3.5.32"
 
 %help
 Data collection utilities for the European Spallation Source.
