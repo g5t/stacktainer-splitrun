@@ -2,7 +2,8 @@ Bootstrap: oras
 From: ghcr.io/g5t/stacktainer/ecdc:3.0
 
 %arguments
-plumber_version="0.9.0"
+plumber_version="0.10.0"
+niess_version="0.0.7"
 mcpl_version="2.2.0"
 ncrystal_version="4.2.0"
 readout_version="0.3.2"
@@ -25,6 +26,7 @@ rm -rf /readout /root/.conan*
 
 python -m pip install \
   ephemeral-port-reserve \
+  "niess=={{ niess_version }}" \
   "mccode-plumber=={{ plumber_version }}" \
   "ncrystal=={{ ncrystal_version }}" \
   "mcpl=={{ mcpl_version }}"
