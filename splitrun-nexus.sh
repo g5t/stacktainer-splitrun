@@ -53,7 +53,7 @@ IMPL_PARAMS+=(-w ${INSTRUMENT_DIR})
 IMPL_PARAMS+=(-c "ForwardConfig")
 IMPL_PARAMS+=(-p ${prefix} --parameter-topic "SimulatedParameters")
 IMPL_PARAMS+=(-o "WriterCommand" -j "WriterJob")
-IMPL_PARAMS+=(--event-source "${lower_instument}_detector" --event-topic "SimulatedEvents")
+IMPL_PARAMS+=(--event-source "${lower_instrument}_detector" --event-topic "SimulatedEvents")
 IMPL_PARAMS+=(--filename "${filename}")
 IMPL_PARAMS+=(--origin "sample_stack")
 if test -f "${INSTRUMENT_DIR}/${INSTRUMENT}.json"; then

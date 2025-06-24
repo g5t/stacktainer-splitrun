@@ -2,7 +2,7 @@ Bootstrap: oras
 From: ghcr.io/g5t/stacktainer/ecdc:4.0
 
 %arguments
-plumber_version="0.11.0"
+plumber_version="0.11.1"
 niess_version="0.0.7"
 mcpl_version="2.2.0"
 ncrystal_version="4.2.0"
@@ -17,7 +17,7 @@ splitrun-nexus.sh /usr/bin/splitrun-nexus
 
 
 %post
-dnf install -y gcc g++ git uuid python3.12-pyyaml
+dnf install -y gcc g++ git uuid python3.12-pyyaml openmpi
 python -m pip install cmake conan
 git clone -b "v{{ readout_version }}" https://github.com/g5t/mcstas-readout-master.git /readout/repo
 cmake -S /readout/repo -B /readout/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/
@@ -40,6 +40,21 @@ dnf clean all
 export LC_ALL=C
 export RESTAGE_FIXED=${RESTAGE_FIXED:-''}
 export MCCODEANTLR_MCCODE_POOCH__TAG="v3.5.32"
+export MPI_COMPILER=openmpi-x86_64
+export LD_LIBRARY_PATH=/usr/lib64/openmpi/lib::/event-formation-unit/lib:/.singularity.d/libs
+export MANPATH=/usr/share/man/openmpi-x86_64:/usr/share/man
+export MPI_INCLUDE=/usr/include/openmpi-x86_64
+export MPI_MAN=/usr/share/man/openmpi-x86_64
+export PKG_CONFIG_PATH=/usr/lib64/openmpi/lib/pkgconfig
+export MPI_PYTHON3_SITEARCH=/usr/lib64/python3.9/site-packages/openmpi
+export MPI_HOME=/usr/lib64/openmpi
+export MPI_FORTRAN_MOD_DIR=/usr/lib64/gfortran/modules/openmpi
+export MPI_SUFFIX=_openmpi
+export MPI_SYSCONFIG=/etc/openmpi-x86_64
+export MPI_LIB=/usr/lib64/openmpi/lib
+export PATH=/usr/lib64/openmpi/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/event-formation-unit/bin:/kafka-to-nexus/bin
+export MPI_BIN=/usr/lib64/openmpi/bin
+
 
 %help
 Data collection utilities for the European Spallation Source.
