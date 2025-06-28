@@ -1,0 +1,33 @@
+Bootstrap: localimage
+From: splitrun_base.sif
+
+%arguments
+plumber_version="0.11.2"
+
+%files
+/home/g/PycharmProjects/mccode-plumber /mccode-plumber
+/home/g/PycharmProjects/restage /restage
+
+%post
+python -m pip install /restage /mccode-plumber
+
+%environment
+export LC_ALL=C
+export RESTAGE_FIXED=${RESTAGE_FIXED:-''}
+export MCCODEANTLR_MCCODE_POOCH__TAG="v3.5.32"
+export MPI_COMPILER=openmpi-x86_64
+export LD_LIBRARY_PATH=/usr/lib64/openmpi/lib::/event-formation-unit/lib:/.singularity.d/libs
+export MANPATH=/usr/share/man/openmpi-x86_64:/usr/share/man
+export MPI_INCLUDE=/usr/include/openmpi-x86_64
+export MPI_MAN=/usr/share/man/openmpi-x86_64
+export PKG_CONFIG_PATH=/usr/lib64/openmpi/lib/pkgconfig
+export MPI_PYTHON3_SITEARCH=/usr/lib64/python3.9/site-packages/openmpi
+export MPI_HOME=/usr/lib64/openmpi
+export MPI_FORTRAN_MOD_DIR=/usr/lib64/gfortran/modules/openmpi
+export MPI_SUFFIX=_openmpi
+export MPI_SYSCONFIG=/etc/openmpi-x86_64
+export MPI_LIB=/usr/lib64/openmpi/lib
+export PATH=/usr/lib64/openmpi/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/event-formation-unit/bin:/kafka-to-nexus/bin
+export MPI_BIN=/usr/lib64/openmpi/bin
+
+

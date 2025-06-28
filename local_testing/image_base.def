@@ -2,11 +2,13 @@ Bootstrap: oras
 From: ghcr.io/g5t/stacktainer/ecdc:4.0
 
 %arguments
-plumber_version="0.12.0"
 niess_version="0.0.7"
 mcpl_version="2.2.0"
 ncrystal_version="4.2.0"
 readout_version="0.3.3"
+
+
+%files
 
 
 %post
@@ -20,7 +22,6 @@ rm -rf /readout /root/.conan*
 python -m pip install \
   ephemeral-port-reserve \
   "niess=={{ niess_version }}" \
-  "mccode-plumber=={{ plumber_version }}" \
   "ncrystal=={{ ncrystal_version }}" \
   "mcpl=={{ mcpl_version }}"
 echo "export MCCODEANTLR_FLAGS__MCPL='$(mcpl-config --show buildflags)'" >> $APPTAINER_ENVIRONMENT
