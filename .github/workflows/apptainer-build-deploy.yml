@@ -35,4 +35,5 @@ jobs:
           deffile: image.def
           image-version: ${{ env.IMAGE_VERSION }}
           image-url: "oras://ghcr.io/g5t/stacktainer/splitrun:${{ env.IMAGE_VERSION }}"
+          add-tags: "latest"
           
