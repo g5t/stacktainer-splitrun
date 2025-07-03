@@ -2,7 +2,7 @@ Bootstrap: oras
 From: ghcr.io/g5t/stacktainer/ecdc:4.0
 
 %arguments
-plumber_version="0.13.3"
+plumber_version="0.13.4"
 niess_version="0.0.7"
 mcpl_version="2.2.0"
 ncrystal_version="4.2.0"

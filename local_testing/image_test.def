@@ -1,15 +1,17 @@
 Bootstrap: localimage
 From: splitrun_base.sif
 
-%arguments
-plumber_version="0.11.2"
-
 %files
-/home/g/PycharmProjects/mccode-plumber /mccode-plumber
-/home/g/PycharmProjects/restage /restage
+/home/g/PycharmProjects/mccode-plumber /src/mccode-plumber
+/home/g/PycharmProjects/restage /src/restage
+/home/g/PycharmProjects/mccode-antlr /src/mccode-antlr
 
 %post
-python -m pip install /restage /mccode-plumber
+dnf install -y java
+python -m pip install /src/restage /src/mccode-plumber /src/mccode-antlr
+dnf remove -y java
+dnf clean all
+rm -rf /src
 
 %environment
 export LC_ALL=C
