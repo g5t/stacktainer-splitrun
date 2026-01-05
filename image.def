@@ -3,7 +3,7 @@ From: ghcr.io/g5t/stacktainer/ecdc:4.0
 
 %arguments
 plumber_version="0.14.4"
-niess_version="0.1.2"
+niess_version="0.1.3"
 mcpl_version="2.2.4"
 ncrystal_version="4.2.10"
 readout_version="0.3.3"
