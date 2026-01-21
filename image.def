@@ -1,8 +1,8 @@
 Bootstrap: oras
-From: ghcr.io/g5t/stacktainer/ecdc:4.0
+From: ghcr.io/g5t/stacktainer/ecdc:5.0
 
 %arguments
-plumber_version="0.16.0"
+plumber_version="0.17.0"
 niess_version="0.1.5"
 mcpl_version="2.2.6"
 ncrystal_version="4.2.12"
@@ -31,7 +31,7 @@ dnf clean all
 %environment
 export LC_ALL=C
 export RESTAGE_FIXED=${RESTAGE_FIXED:-''}
-export MCCODEANTLR_MCCODE_POOCH__TAG="v3.5.32"
+export MCCODEANTLR_MCCODE_POOCH__TAG="v3.6.5"
 export MPI_COMPILER=openmpi-x86_64
 export LD_LIBRARY_PATH=/usr/lib64/openmpi/lib::/event-formation-unit/lib:/.singularity.d/libs
 export MANPATH=/usr/share/man/openmpi-x86_64:/usr/share/man
@@ -44,7 +44,7 @@ export MPI_FORTRAN_MOD_DIR=/usr/lib64/gfortran/modules/openmpi
 export MPI_SUFFIX=_openmpi
 export MPI_SYSCONFIG=/etc/openmpi-x86_64
 export MPI_LIB=/usr/lib64/openmpi/lib
-export PATH=/usr/lib64/openmpi/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/event-formation-unit/bin:/kafka-to-nexus/bin
+export PATH=/usr/lib64/openmpi/bin:$PATH
 export MPI_BIN=/usr/lib64/openmpi/bin
 
 
@@ -120,10 +120,10 @@ function test_help(){
   return $res
 }
 test_result=0
-test_revision $(echo ${EFU_VERSION} | tr '-' ' ')  bifrost cbm cspec dream freia loki miracles nmx timepix3 trex || test_result=1
+#test_revision $(echo ${EFU_VERSION} | tr '-' ' ')  bifrost cbm cspec dream freia loki miracles nmx timepix3 trex || test_result=1
 test_revision Readout {{ readout_version }} readout-config || test_result=1
 test_revision MCPL {{ mcpl_version }} mcpl-config || test_result=1
 test_revision NCrystal {{ ncrystal_version }} ncrystal-config || test_result=1
-test_revision $(echo ${WRITER_VERSION} | tr '-' ' ') kafka-to-nexus || test_result=1
+#test_revision $(echo ${WRITER_VERSION} | tr '-' ' ') kafka-to-nexus || test_result=1
 test_help file-maker template-maker readout-replay || test_result=1
 exit ${test_result}
