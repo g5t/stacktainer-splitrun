@@ -7,12 +7,13 @@ niess_version="0.3.1"
 mcpl_version="2.2.6"
 ncrystal_version="4.2.12"
 readout_version="0.3.3"
+readout_branch="refactor-for-scan-data"
 
 
 %post
 dnf install -y gcc g++ git uuid python3.12-pyyaml openmpi
 python -m pip install cmake conan
-git clone -b "v{{ readout_version }}" https://github.com/mcdotstar/mcstas-readout-master.git /readout/repo
+git clone -b "{{ readout_branch }}" https://github.com/mcdotstar/mcstas-readout-master.git /readout/repo
 cmake -S /readout/repo -B /readout/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/
 cmake --build /readout/build --target install -j
 rm -rf /readout /root/.conan*
