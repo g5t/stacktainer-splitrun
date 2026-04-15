@@ -7,7 +7,7 @@ niess_version="0.3.1"
 mcpl_version="2.2.6"
 ncrystal_version="4.2.12"
 readout_version="0.3.3"
-readout_branch="refactor-for-scan-data"
+readout_branch="devel"
 
 
 %post
