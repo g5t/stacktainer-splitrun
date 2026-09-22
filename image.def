@@ -1,22 +1,20 @@
 Bootstrap: oras
-From: ghcr.io/g5t/stacktainer/ecdc:5.0
+From: ghcr.io/g5t/stacktainer/ecdc:6.0
 
 %arguments
-plumber_version="0.18.0"
-niess_version="0.3.1"
-mcpl_version="2.2.6"
-ncrystal_version="4.2.12"
-readout_version="0.3.3"
-readout_branch="devel"
-
+plumber_version="0.21.0"
+niess_version="0.7.0"
+mcpl_version="2.2.8"
+ncrystal_version="4.4.6"
+readout_version="0.6.0"
+mccode_tag="v3.8.7"
+mcstas_chopper_lib_version="4.2.1"
+cache_home="/opt/mccodeantlr-cache"
 
 %post
+set -eu
+
 dnf install -y gcc g++ git uuid python3.12-pyyaml openmpi
-python -m pip install cmake conan
-git clone -b "{{ readout_branch }}" https://github.com/mcdotstar/mcstas-readout-master.git /readout/repo
-cmake -S /readout/repo -B /readout/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/
-cmake --build /readout/build --target install -j
-rm -rf /readout /root/.conan*
 
 python -m pip install \
   ephemeral-port-reserve \
@@ -24,17 +22,128 @@ python -m pip install \
   "mccode-plumber=={{ plumber_version }}" \
   "ncrystal=={{ ncrystal_version }}" \
   "mcpl=={{ mcpl_version }}"
+
+# Kept separate so --only-binary applies to this package alone: it must come from
+# a wheel (a source build would need cmake and conan), while the pure-Python
+# packages above are happy either way.
+python -m pip install --only-binary=:all: "mcstas-readout-master=={{ readout_version }}"
+
 echo "export MCCODEANTLR_FLAGS__MCPL='$(mcpl-config --show buildflags)'" >> $APPTAINER_ENVIRONMENT
 echo "export MCCODEANTLR_FLAGS__NCRYSTAL='$(ncrystal-config --show buildflags)'" >> $APPTAINER_ENVIRONMENT
+
+# ── mccode-antlr cache ────────────────────────────────────────────────────────
+# Built into the image so a run needs no network. It has to live outside $HOME:
+# Apptainer bind-mounts the host home over the image's, so a cache under ~/.cache
+# would be invisible at runtime. XDG_CACHE_HOME is the only lever that moves it --
+# pooch resolves it through platformdirs and mccode-antlr exposes no setting of
+# its own.
+export XDG_CACHE_HOME={{ cache_home }}
+
+# One list, used by both passes. `populate` downloads; `ir-build` only parses what
+# is already on disk, so the same registries must be named to both.
+REGISTRIES="\
+ -R mcdotstar/mcstas-chopper-lib@v{{ mcstas_chopper_lib_version }}\
+ -R mcdotstar/mccode-mcpl-filter@main\
+ -R mcdotstar/mcstas-detector-cubes@main\
+ -R mcdotstar/mcstas-detector-tubes@main\
+ -R mcdotstar/mcstas-epics-link@main\
+ -R mcdotstar/mcstas-frame-tof-monitor@main\
+ -R mcdotstar/mcstas-monochromator-rowland@main\
+ -R mcdotstar/mcstas-radial-filter-collimator@main\
+ -R mcdotstar/mcstas-slit-radial@main\
+ -R mcdotstar/mcstas-transformer@main"
+
+mccode-antlr cache populate --tag {{ mccode_tag }} --flavor mcstas $REGISTRIES
+mccode-antlr cache ir-build -j --tag {{ mccode_tag }} --flavor mcstas $REGISTRIES
+
+# ── splitrun-cache-seed ───────────────────────────────────────────────────────
+# The image cache is read-only. mccode-antlr degrades gracefully against that --
+# it warns and re-fetches rather than failing -- but anyone adding their own
+# registry, or wanting the IR cache to persist, needs a writable copy. This makes
+# one, and prints its path so a modulefile can do
+#     setenv XDG_CACHE_HOME [exec splitrun-cache-seed]
+cat > /usr/local/bin/splitrun-cache-seed <<'SEED'
+#!/bin/sh
+# Seed a writable copy of this image's mccode-antlr cache.
+#
+# Prints the resulting directory on stdout -- use it as XDG_CACHE_HOME. All
+# progress reporting goes to stderr so that
+#     XDG_CACHE_HOME=$(splitrun-cache-seed)
+# does the right thing.
+set -eu
+
+IMAGE_CACHE='@CACHE_HOME@'
+BUILD_STAMP='@BUILD_STAMP@'
+STAMP=.splitrun-cache-stamp
+
+usage() {
+    cat <<USAGE
+Usage: splitrun-cache-seed [-q] [-f] [TARGET]
+
+Copy the image's mccode-antlr cache to TARGET and print TARGET.
+
+  TARGET   default: \$SPLITRUN_CACHE_HOME, else \$HOME/.cache/splitrun
+  -q       no progress messages
+  -f       re-copy even if TARGET is already seeded from this image
+  -h       this message
+
+The copy is additive: registries you have added to TARGET yourself are left
+alone, image-provided ones are refreshed.
+USAGE
+}
+
+quiet=0; force=0; target=''
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -q|--quiet) quiet=1 ;;
+        -f|--force) force=1 ;;
+        -h|--help) usage; exit 0 ;;
+        --) shift; break ;;
+        -*) printf 'splitrun-cache-seed: unknown option %s\n' "$1" >&2; usage >&2; exit 2 ;;
+        *) target=$1 ;;
+    esac
+    shift
+done
+if [ $# -gt 0 ]; then target=$1; fi
+
+if [ -z "$target" ]; then
+    target=${SPLITRUN_CACHE_HOME:-${HOME:-/tmp}/.cache/splitrun}
+fi
+
+say() { [ "$quiet" -eq 1 ] || printf 'splitrun-cache-seed: %s\n' "$*" >&2; }
+
+if [ ! -d "$IMAGE_CACHE" ]; then
+    printf 'splitrun-cache-seed: no cache at %s in this image\n' "$IMAGE_CACHE" >&2
+    exit 1
+fi
+
+if [ "$force" -eq 0 ] && [ -f "$target/$STAMP" ] \
+   && [ "$(cat "$target/$STAMP")" = "$BUILD_STAMP" ]; then
+    say "already seeded: $target"
+else
+    say "seeding from $IMAGE_CACHE into $target"
+    mkdir -p "$target"
+    cp -a "$IMAGE_CACHE/." "$target/"
+    printf '%s\n' "$BUILD_STAMP" > "$target/$STAMP"
+    say 'done'
+fi
+
+printf '%s\n' "$target"
+SEED
+
+sed -i "s|@CACHE_HOME@|{{ cache_home }}|; \
+        s|@BUILD_STAMP@|{{ mccode_tag }} $(python -c 'import mccode_antlr.version as v; print(v.version())' 2>/dev/null || echo unknown)|" \
+    /usr/local/bin/splitrun-cache-seed
+chmod 0755 /usr/local/bin/splitrun-cache-seed
 
 dnf clean all
 
 %environment
 export LC_ALL=C
 export RESTAGE_FIXED=${RESTAGE_FIXED:-''}
-export MCCODEANTLR_MCCODE_POOCH__TAG="v3.6.5"
+export MCCODEANTLR_MCCODE_POOCH__TAG={{ mccode_tag }}
 export MPI_COMPILER=openmpi-x86_64
-export LD_LIBRARY_PATH=/usr/lib64/openmpi/lib::/event-formation-unit/lib:/.singularity.d/libs
+export LD_LIBRARY_PATH=/usr/lib64/openmpi/lib:/event-formation-unit/lib:/.singularity.d/libs
 export MANPATH=/usr/share/man/openmpi-x86_64:/usr/share/man
 export MPI_INCLUDE=/usr/include/openmpi-x86_64
 export MPI_MAN=/usr/share/man/openmpi-x86_64
@@ -48,6 +157,16 @@ export MPI_LIB=/usr/lib64/openmpi/lib
 export PATH=/usr/lib64/openmpi/bin:$PATH
 export MPI_BIN=/usr/lib64/openmpi/bin
 
+# The host home is bind-mounted over the image's, so a host ~/.local
+# site-packages would shadow what is installed here. Keep it out.
+export PYTHONNOUSERSITE=1
+# The in-image cache. Override it -- see splitrun-cache-seed -- to get a writable
+# one; the image environment wins over the host's, but --env still beats both.
+export XDG_CACHE_HOME={{ cache_home }}
+
+%labels
+McCodeTag {{ mccode_tag }}
+CacheHome {{ cache_home }}
 
 %help
 Data collection utilities for the European Spallation Source.
@@ -90,7 +209,29 @@ NCrystal binaries:
 	ncrystal_mcstasunion  - tool to construct material descriptions for McStas or McStasScript
 	ncrystal_*            - too numerous to enumerate here, see homepage
 	ncrystal-config       - configuration information for the NCrystal installation 
-	
+Cache utilities:
+	splitrun-cache-seed   - Copy this image's mccode-antlr cache somewhere writable and print where
+
+The McCode components and their parsed intermediate representation are built into
+the image, so translating an instrument needs no network. The cache is read-only,
+which mccode-antlr tolerates -- it warns and re-fetches rather than failing -- but
+to add your own component registry, or to keep the IR cache between runs, seed a
+writable copy:
+
+	apptainer exec {this}.sif splitrun-cache-seed
+	apptainer exec --env XDG_CACHE_HOME=$HOME/.cache/splitrun {this}.sif mp-splitrun ...
+
+or, from a modulefile,
+
+	setenv XDG_CACHE_HOME [exec splitrun-cache-seed]
+
+splitrun-cache-seed prints the directory on stdout and everything else on stderr,
+so it can be captured directly. It is idempotent, and re-seeding leaves registries
+you added yourself alone.
+
+Inspect what is cached with `mccode-antlr cache list -l` and
+`mccode-antlr cache ir-list -l`.
+
 
 %test
 function test_revision(){
@@ -127,4 +268,39 @@ test_revision MCPL {{ mcpl_version }} mcpl-config || test_result=1
 test_revision NCrystal {{ ncrystal_version }} ncrystal-config || test_result=1
 #test_revision $(echo ${WRITER_VERSION} | tr '-' ' ') kafka-to-nexus || test_result=1
 test_help file-maker template-maker readout-replay || test_result=1
+
+# The environment the cache depends on. PYTHONNOUSERSITE was once spelled
+# `exporot`, which a build cannot catch but this does.
+echo -n "Check XDG_CACHE_HOME points at the image cache ... "
+test "${XDG_CACHE_HOME}" = "/opt/mccodeantlr-cache" && echo "yes!" || { echo "no: '${XDG_CACHE_HOME:-unset}'"; test_result=1; }
+echo -n "Check PYTHONNOUSERSITE is set ... "
+test -n "${PYTHONNOUSERSITE:-}" && echo "yes!" || { echo "no!"; test_result=1; }
+
+# The cache itself: populated, and carrying IR sidecars rather than just sources.
+echo -n "Check the component cache is populated ... "
+n_comp=$(find "${XDG_CACHE_HOME}" -name '*.comp' 2>/dev/null | wc -l)
+test "${n_comp}" -gt 100 && echo "yes! (${n_comp} .comp)" || { echo "no: only ${n_comp}"; test_result=1; }
+echo -n "Check the IR cache is populated ... "
+n_ir=$(find "${XDG_CACHE_HOME}" -name '*.comp.*.json' 2>/dev/null | wc -l)
+test "${n_ir}" -gt 100 && echo "yes! (${n_ir} sidecars)" || { echo "no: only ${n_ir}"; test_result=1; }
+
+# Every -R registry named at build time should have landed.
+echo -n "Check the extra registries are present ... "
+missing=""
+for r in mcstas-chopper-lib mccode-mcpl-filter mcstas-detector-cubes mcstas-detector-tubes \
+         mcstas-epics-link mcstas-frame-tof-monitor mcstas-monochromator-rowland \
+         mcstas-radial-filter-collimator mcstas-slit-radial mcstas-transformer
+do
+  test -d "${XDG_CACHE_HOME}/mccodeantlr/${r}" || missing="${missing} ${r}"
+done
+test -z "${missing}" && echo "yes!" || { echo "missing:${missing}"; test_result=1; }
+
+# The helper, including that its stdout is a bare path fit for $( ).
+test_help splitrun-cache-seed || test_result=1
+echo -n "Check splitrun-cache-seed seeds a writable copy ... "
+seeded=$(splitrun-cache-seed -q /tmp/splitrun-cache-seed-test 2>/dev/null)
+test "${seeded}" = "/tmp/splitrun-cache-seed-test" -a -d "${seeded}/mccodeantlr" \
+  && echo "yes!" || { echo "no: got '${seeded}'"; test_result=1; }
+rm -rf /tmp/splitrun-cache-seed-test
+
 exit ${test_result}
