@@ -2,8 +2,9 @@ Bootstrap: oras
 From: ghcr.io/g5t/stacktainer/ecdc:6.0
 
 %arguments
-plumber_version="0.21.0"
-niess_version="0.7.0"
+plumber_version="0.22.0"
+niess_version="0.8.0"
+restage_version="0.15.0"
 mcpl_version="2.2.8"
 ncrystal_version="4.4.6"
 readout_version="0.6.0"
@@ -20,6 +21,7 @@ python -m pip install \
   ephemeral-port-reserve \
   "niess=={{ niess_version }}" \
   "mccode-plumber=={{ plumber_version }}" \
+  "restage=={{ restage_version }}" \
   "ncrystal=={{ ncrystal_version }}" \
   "mcpl=={{ mcpl_version }}"
 
@@ -268,6 +270,18 @@ test_revision MCPL {{ mcpl_version }} mcpl-config || test_result=1
 test_revision NCrystal {{ ncrystal_version }} ncrystal-config || test_result=1
 #test_revision $(echo ${WRITER_VERSION} | tr '-' ' ') kafka-to-nexus || test_result=1
 test_help file-maker template-maker readout-replay || test_result=1
+
+# The Python packages that have to agree with each other. restage is pinned as well as
+# mccode-plumber because plumber accepts an older restage that would set chopper knobs
+# under names a niess-built instrument no longer declares.
+function test_package(){
+  echo -n "Check $1 is $2 ... "
+  found=$(python -c "from importlib.metadata import version; print(version('$1'))" 2>&1)
+  test "${found}" = "$2" && echo "yes!" || { echo "no: ${found}"; return 1; }
+}
+test_package niess {{ niess_version }} || test_result=1
+test_package restage {{ restage_version }} || test_result=1
+test_package mccode-plumber {{ plumber_version }} || test_result=1
 
 # The environment the cache depends on. PYTHONNOUSERSITE was once spelled
 # `exporot`, which a build cannot catch but this does.
