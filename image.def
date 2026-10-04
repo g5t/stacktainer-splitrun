@@ -11,6 +11,9 @@ readout_version="0.6.0"
 mccode_tag="v3.8.7"
 mcstas_chopper_lib_version="4.2.1"
 cache_home="/opt/mccodeantlr-cache"
+# kafka-to-nexus versions known to create files with SWMR_WRITE (see the shim in %post);
+# only consulted by %test if file-maker cannot show it directly.
+k2n_swmr_bad_versions="HEAD-232c717"
 
 %post
 set -eu
@@ -29,6 +32,55 @@ python -m pip install \
 # a wheel (a source build would need cmake and conan), while the pure-Python
 # packages above are happy either way.
 python -m pip install --only-binary=:all: "mcstas-readout-master=={{ readout_version }}"
+
+# ── kafka-to-nexus: create files without SWMR ────────────────────────────────
+# The base image's kafka-to-nexus creates each file with H5F_ACC_SWMR_WRITE already
+# set, writes the static structure, then closes and reopens it in SWMR mode. Past
+# about 630 static datasets (BIFROST has ~3100) that leaves HDF5 1.14.5's metadata
+# cache corrupted, and the writer later dies at the end of a job with "malloc():
+# unsorted double linked list corrupted", leaving an unreadable file -- about one
+# job in six. Creating the file without the flag, and keeping the reopen, avoids it.
+# Until the fix is in kafka-to-nexus, this preload shim drops the flag from
+# H5Fcreate, and a wrapper takes the binary's place so every caller gets it.
+mkdir -p /opt/k2n-swmr-fix
+cat > /opt/k2n-swmr-fix/noswmr_create.c <<'SHIM'
+/* LD_PRELOAD shim: create HDF5 files without H5F_ACC_SWMR_WRITE, so that kafka-to-nexus
+ * builds each file in regular mode and only then reopens it for SWMR writing.
+ * No HDF5 headers in the image, so the two definitions needed are copied from
+ * HDF5 1.14's H5Ipublic.h and H5Fpublic.h.
+ *
+ * With NOSWMR_PROBE set it changes nothing and only reports, on stderr, whether the
+ * caller asked for SWMR_WRITE: that is how the image's %test finds out whether the
+ * shim is still needed. */
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+typedef int64_t hid_t;
+#define H5F_ACC_SWMR_WRITE 0x0020u
+
+hid_t H5Fcreate(const char *name, unsigned flags, hid_t fcpl, hid_t fapl) {
+  static hid_t (*real)(const char *, unsigned, hid_t, hid_t) = 0;
+  if (!real) real = (hid_t (*)(const char *, unsigned, hid_t, hid_t))dlsym(RTLD_NEXT, "H5Fcreate");
+  if (getenv("NOSWMR_PROBE")) {
+    fprintf(stderr, "noswmr_create: H5Fcreate %s SWMR_WRITE\n",
+            (flags & H5F_ACC_SWMR_WRITE) ? "with" : "without");
+    return real(name, flags, fcpl, fapl);
+  }
+  return real(name, flags & ~H5F_ACC_SWMR_WRITE, fcpl, fapl);
+}
+SHIM
+gcc -O2 -shared -fPIC -o /opt/k2n-swmr-fix/noswmr_create.so /opt/k2n-swmr-fix/noswmr_create.c -ldl
+mv /kafka-to-nexus/bin/kafka-to-nexus /kafka-to-nexus/bin/kafka-to-nexus.real
+cat > /kafka-to-nexus/bin/kafka-to-nexus <<'WRAP'
+#!/bin/sh
+# kafka-to-nexus, with HDF5 files created without SWMR -- see /opt/k2n-swmr-fix
+export LD_PRELOAD=/opt/k2n-swmr-fix/noswmr_create.so${LD_PRELOAD:+:$LD_PRELOAD}
+exec /kafka-to-nexus/bin/kafka-to-nexus.real "$@"
+WRAP
+chmod 0755 /kafka-to-nexus/bin/kafka-to-nexus
 
 echo "export MCCODEANTLR_FLAGS__MCPL='$(mcpl-config --show buildflags)'" >> $APPTAINER_ENVIRONMENT
 echo "export MCCODEANTLR_FLAGS__NCRYSTAL='$(ncrystal-config --show buildflags)'" >> $APPTAINER_ENVIRONMENT
@@ -282,6 +334,65 @@ function test_package(){
 test_package niess {{ niess_version }} || test_result=1
 test_package restage {{ restage_version }} || test_result=1
 test_package mccode-plumber {{ plumber_version }} || test_result=1
+
+# The kafka-to-nexus SWMR shim (see %post). First that it works: a file asked for with
+# SWMR_WRITE is created without it when the shim is preloaded, and with it otherwise --
+# so the copied flag value matches this HDF5. Then that the wrapper loads it.
+cat > /tmp/swmr-intent.py <<'PY'
+import ctypes, os, sys, tempfile
+hdf5 = ctypes.CDLL('/kafka-to-nexus/lib/libhdf5.so.310', mode=ctypes.RTLD_GLOBAL)
+glob = ctypes.CDLL(None)  # H5Fcreate as the writer sees it: the shim's, if preloaded
+hid_t = ctypes.c_int64  # ids are 64-bit; ctypes would truncate them to int by default
+hdf5.H5Pcreate.restype = glob.H5Fcreate.restype = hid_t
+hdf5.H5open()
+fapl = hdf5.H5Pcreate(hid_t.in_dll(hdf5, 'H5P_CLS_FILE_ACCESS_ID_g'))
+LATEST = 3  # H5F_LIBVER_V114; SWMR needs the latest file format
+hdf5.H5Pset_libver_bounds(hid_t(fapl), LATEST, LATEST)
+path = os.path.join(tempfile.mkdtemp(), 'swmr.h5')
+fid = glob.H5Fcreate(path.encode(), 0x0004 | 0x0020, hid_t(0), hid_t(fapl))  # EXCL|SWMR_WRITE
+if fid < 0:
+    sys.exit('H5Fcreate failed')
+intent = ctypes.c_uint()
+hdf5.H5Fget_intent(hid_t(fid), ctypes.byref(intent))
+hdf5.H5Fclose(hid_t(fid))
+print('swmr' if intent.value & 0x0020 else 'plain')
+PY
+echo -n "Check the shim creates HDF5 files without SWMR_WRITE ... "
+with=$(LD_PRELOAD=/opt/k2n-swmr-fix/noswmr_create.so python /tmp/swmr-intent.py 2>&1)
+without=$(python /tmp/swmr-intent.py 2>&1)
+test "${with}" = plain -a "${without}" = swmr && echo "yes!" \
+  || { echo "no: with shim '${with}', without '${without}'"; test_result=1; }
+rm -f /tmp/swmr-intent.py
+echo -n "Check kafka-to-nexus runs with the shim loaded ... "
+LD_DEBUG=libs kafka-to-nexus --version 2>&1 | grep -q 'noswmr_create.so' && echo "yes!" \
+  || { echo "no!"; test_result=1; }
+
+# Is the shim still needed? file-maker builds a file through the same library code as
+# the writer, so the shim's probe mode shows whether kafka-to-nexus still asks for
+# SWMR_WRITE at creation. If it no longer does, this fails on purpose: delete the shim,
+# its wrapper and these checks. Only if the probe cannot run is the version list used.
+echo -n "Check the SWMR shim is still needed ... "
+k2n_version=$(/kafka-to-nexus/bin/kafka-to-nexus.real --version 2>&1)
+probe_dir=$(mktemp -d)
+echo '{"children": [{"type": "group", "name": "entry", "children": [],
+  "attributes": [{"name": "NX_class", "values": "NXentry"}]}]}' > "${probe_dir}/probe.json"
+probe=$(cd "${probe_dir}" && NOSWMR_PROBE=1 LD_PRELOAD=/opt/k2n-swmr-fix/noswmr_create.so \
+  timeout 60 file-maker -f probe.json -o probe.h5 2>&1 | grep -o 'H5Fcreate [a-z]* SWMR_WRITE' | head -1)
+rm -rf "${probe_dir}"
+case "${probe}" in
+  "H5Fcreate with SWMR_WRITE")
+    echo "yes! (${k2n_version} still creates files with SWMR_WRITE)" ;;
+  "H5Fcreate without SWMR_WRITE")
+    echo "no: ${k2n_version} creates files without SWMR_WRITE -- remove the shim"
+    test_result=1 ;;
+  *)
+    if echo " {{ k2n_swmr_bad_versions }} " | grep -q " ${k2n_version} "; then
+      echo "yes! (file-maker probe failed; ${k2n_version} is a known-bad version)"
+    else
+      echo "unknown: file-maker probe failed and ${k2n_version} is not a known-bad version"
+      test_result=1
+    fi ;;
+esac
 
 # The environment the cache depends on. PYTHONNOUSERSITE was once spelled
 # `exporot`, which a build cannot catch but this does.
