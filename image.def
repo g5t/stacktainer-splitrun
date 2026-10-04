@@ -14,6 +14,9 @@ cache_home="/opt/mccodeantlr-cache"
 # kafka-to-nexus versions known to create files with SWMR_WRITE (see the shim in %post);
 # only consulted by %test if file-maker cannot show it directly.
 k2n_swmr_bad_versions="HEAD-232c717"
+# kafka-to-nexus versions known to forward into a destroyed MessageWriter at the end of
+# a job (see the teardown shim in %post); %test fails for any other version.
+k2n_teardown_bad_versions="HEAD-232c717"
 
 %post
 set -eu
@@ -37,11 +40,11 @@ python -m pip install --only-binary=:all: "mcstas-readout-master=={{ readout_ver
 # The base image's kafka-to-nexus creates each file with H5F_ACC_SWMR_WRITE already
 # set, writes the static structure, then closes and reopens it in SWMR mode. Past
 # about 630 static datasets (BIFROST has ~3100) that leaves HDF5 1.14.5's metadata
-# cache corrupted, and the writer later dies at the end of a job with "malloc():
-# unsorted double linked list corrupted", leaving an unreadable file -- about one
-# job in six. Creating the file without the flag, and keeping the reopen, avoids it.
-# Until the fix is in kafka-to-nexus, this preload shim drops the flag from
-# H5Fcreate, and a wrapper takes the binary's place so every caller gets it.
+# cache inconsistent: a debug HDF5 aborts at the reopen (file-maker shows it offline).
+# Creating the file without the flag, and keeping the reopen, avoids it. Until the fix
+# is in kafka-to-nexus, this preload shim drops the flag from H5Fcreate, and a wrapper
+# takes the binary's place so every caller gets it. (This was first blamed for the
+# writer's crash at the end of a job; that turned out to be the teardown bug below.)
 mkdir -p /opt/k2n-swmr-fix
 cat > /opt/k2n-swmr-fix/noswmr_create.c <<'SHIM'
 /* LD_PRELOAD shim: create HDF5 files without H5F_ACC_SWMR_WRITE, so that kafka-to-nexus
@@ -73,11 +76,89 @@ hid_t H5Fcreate(const char *name, unsigned flags, hid_t fcpl, hid_t fapl) {
 }
 SHIM
 gcc -O2 -shared -fPIC -o /opt/k2n-swmr-fix/noswmr_create.so /opt/k2n-swmr-fix/noswmr_create.c -ldl
+
+# ── kafka-to-nexus: do not forward into a destroyed MessageWriter ────────────
+# The writer's crash at the end of a job -- "malloc(): unsorted double linked list
+# corrupted", the file left open -- is a use after destruction in kafka-to-nexus.
+# ~StreamController destroys its MessageWriter (WriterThread) before its topics
+# (Streamers), and each topic's SourceFilter forwards its buffered pre-start message
+# from its destructor, into the destroyed writer's queue. mccode-plumber always stops
+# with stop-now, which leaves the filters alive until then. About one back-to-back
+# BIFROST job in four crashed; none with this shim (see BUG-kafka-to-nexus-crash-on-
+# job-end.md in the mccode-compare workspace). The upstream fix is to declare
+# WriterThread before Streamers.
+# libfilewriter_lib.so makes both calls through its PLT, so a preload can interpose
+# them: once the writer is destroyed, the shim drops buffered forwards -- which could
+# never have been written, the writer's thread having been joined -- and the next
+# job's H5Fcreate, made before its new writer exists, re-arms them.
+mkdir -p /opt/k2n-teardown-fix
+cat > /opt/k2n-teardown-fix/teardown_fix.c <<'SHIM'
+/* LD_PRELOAD shim: stop kafka-to-nexus's SourceFilters forwarding into a destroyed
+ * MessageWriter at the end of a job. See image.def's %post. Each teardown that dropped
+ * anything is reported once, on stderr or, if $K2N_TEARDOWN_LOG is set, in that file. */
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <stdatomic.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+typedef int64_t hid_t;
+
+static atomic_int writer_gone = 0;
+static atomic_long dropped = 0;
+
+static void report(long n) {
+  if (n <= 0) return;
+  const char *path = getenv("K2N_TEARDOWN_LOG");
+  FILE *f = path ? fopen(path, "a") : stderr;
+  if (!f) return;
+  fprintf(f, "k2n-teardown-fix: the last job's teardown dropped %ld buffered "
+             "forward(s) into its destroyed MessageWriter\n", n);
+  if (path) fclose(f);
+}
+
+/* Stream::MessageWriter::~MessageWriter() */
+void _ZN6Stream13MessageWriterD1Ev(void *self) {
+  static void (*real)(void *) = 0;
+  if (!real) real = (void (*)(void *))dlsym(RTLD_NEXT, "_ZN6Stream13MessageWriterD1Ev");
+  real(self);
+  atomic_store(&writer_gone, 1);
+}
+
+/* Stream::SourceFilter::forward_buffered_message() */
+void _ZN6Stream12SourceFilter24forward_buffered_messageEv(void *self) {
+  static void (*real)(void *) = 0;
+  if (atomic_load(&writer_gone)) {
+    atomic_fetch_add(&dropped, 1);
+    return;
+  }
+  if (!real) real = (void (*)(void *))dlsym(RTLD_NEXT, "_ZN6Stream12SourceFilter24forward_buffered_messageEv");
+  real(self);
+}
+
+/* A job creates its file before its MessageWriter exists: re-arm here. Chains with the
+ * SWMR shim, which wraps H5Fcreate too. */
+hid_t H5Fcreate(const char *name, unsigned flags, hid_t fcpl, hid_t fapl) {
+  static hid_t (*real)(const char *, unsigned, hid_t, hid_t) = 0;
+  if (!real) real = (hid_t (*)(const char *, unsigned, hid_t, hid_t))dlsym(RTLD_NEXT, "H5Fcreate");
+  report(atomic_exchange(&dropped, 0));
+  atomic_store(&writer_gone, 0);
+  return real(name, flags, fcpl, fapl);
+}
+
+__attribute__((destructor)) static void report_at_exit(void) {
+  report(atomic_load(&dropped));
+}
+SHIM
+gcc -O2 -Wall -shared -fPIC -o /opt/k2n-teardown-fix/teardown_fix.so /opt/k2n-teardown-fix/teardown_fix.c -ldl
+
 mv /kafka-to-nexus/bin/kafka-to-nexus /kafka-to-nexus/bin/kafka-to-nexus.real
 cat > /kafka-to-nexus/bin/kafka-to-nexus <<'WRAP'
 #!/bin/sh
-# kafka-to-nexus, with HDF5 files created without SWMR -- see /opt/k2n-swmr-fix
-export LD_PRELOAD=/opt/k2n-swmr-fix/noswmr_create.so${LD_PRELOAD:+:$LD_PRELOAD}
+# kafka-to-nexus, with HDF5 files created without SWMR (/opt/k2n-swmr-fix) and no
+# forwarding into a destroyed MessageWriter at the end of a job (/opt/k2n-teardown-fix)
+export LD_PRELOAD=/opt/k2n-swmr-fix/noswmr_create.so:/opt/k2n-teardown-fix/teardown_fix.so${LD_PRELOAD:+:$LD_PRELOAD}
 exec /kafka-to-nexus/bin/kafka-to-nexus.real "$@"
 WRAP
 chmod 0755 /kafka-to-nexus/bin/kafka-to-nexus
@@ -393,6 +474,32 @@ case "${probe}" in
       test_result=1
     fi ;;
 esac
+
+# The teardown shim (see %post). It can only work while libfilewriter_lib.so calls both
+# functions it replaces through the PLT; a rebuild that binds them locally would leave it
+# loaded and doing nothing, so check the relocations rather than trusting the load.
+echo -n "Check kafka-to-nexus runs with the teardown shim loaded ... "
+LD_DEBUG=libs kafka-to-nexus --version 2>&1 | grep -q 'teardown_fix.so' && echo "yes!" \
+  || { echo "no!"; test_result=1; }
+echo -n "Check the teardown shim can interpose what it replaces ... "
+plt=$(readelf -rW /kafka-to-nexus/lib/libfilewriter_lib.so 2>/dev/null | grep JUMP_SLOT)
+missing=""
+for sym in _ZN6Stream13MessageWriterD1Ev _ZN6Stream12SourceFilter24forward_buffered_messageEv; do
+  echo "${plt}" | grep -q " ${sym}" || missing="${missing} ${sym}"
+done
+test -z "${missing}" && echo "yes!" \
+  || { echo "no: not called through the PLT:${missing}"; test_result=1; }
+
+# Is the teardown shim still needed? That needs Kafka to show, so this goes by version:
+# a kafka-to-nexus that is not known to have the bug fails, on purpose, until someone
+# checks whether StreamController still destroys WriterThread before Streamers.
+echo -n "Check the teardown shim is still needed ... "
+if echo " {{ k2n_teardown_bad_versions }} " | grep -q " ${k2n_version} "; then
+  echo "yes! (${k2n_version} is a known-bad version)"
+else
+  echo "unknown: check whether ${k2n_version} still forwards into a destroyed MessageWriter"
+  test_result=1
+fi
 
 # The environment the cache depends on. PYTHONNOUSERSITE was once spelled
 # `exporot`, which a build cannot catch but this does.
