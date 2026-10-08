@@ -3,8 +3,8 @@ From: ghcr.io/g5t/stacktainer/ecdc:6.0
 
 %arguments
 plumber_version="0.23.1"
-niess_version="0.9.1"
-restage_version="0.15.0"
+niess_version="0.9.2"
+restage_version="0.16.0"
 mcpl_version="2.2.8"
 ncrystal_version="4.4.6"
 readout_version="0.8.0"
