@@ -27,14 +27,10 @@ python -m pip install \
   ephemeral-port-reserve \
   "niess=={{ niess_version }}" \
   "mccode-plumber=={{ plumber_version }}" \
-  "restage=={{ restage_version }}" \
+  "restage[collectors]=={{ restage_version }}" \
+  "mcstas-readout-master=={{ readout_version }}" \
   "ncrystal=={{ ncrystal_version }}" \
   "mcpl=={{ mcpl_version }}"
-
-# Kept separate so --only-binary applies to this package alone: it must come from
-# a wheel (a source build would need cmake and conan), while the pure-Python
-# packages above are happy either way.
-python -m pip install --only-binary=:all: "mcstas-readout-master=={{ readout_version }}"
 
 # ── kafka-to-nexus: create files without SWMR ────────────────────────────────
 # The base image's kafka-to-nexus creates each file with H5F_ACC_SWMR_WRITE already
