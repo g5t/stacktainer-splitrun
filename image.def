@@ -2,6 +2,7 @@ Bootstrap: oras
 From: ghcr.io/g5t/stacktainer/ecdc:6.0
 
 %arguments
+mccode_antlr_version="0.34.0"
 plumber_version="0.25.0"
 niess_version="0.10.1"
 restage_version="0.17.0"
@@ -25,6 +26,7 @@ dnf install -y gcc g++ git uuid python3.12-pyyaml openmpi
 
 python -m pip install \
   ephemeral-port-reserve \
+  "mccode_antlr=={{ mccode_antlr_version }}" \
   "niess=={{ niess_version }}" \
   "mccode-plumber=={{ plumber_version }}" \
   "restage[collectors]=={{ restage_version }}" \
