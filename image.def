@@ -4,7 +4,7 @@ From: ghcr.io/g5t/stacktainer/ecdc:6.0
 %arguments
 mccode_antlr_version="0.34.0"
 plumber_version="0.25.0"
-niess_version="0.10.1"
+niess_version="0.11.1"
 restage_version="0.17.0"
 mcpl_version="2.2.8"
 ncrystal_version="4.4.6"
