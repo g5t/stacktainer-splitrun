@@ -19,6 +19,12 @@ k2n_swmr_bad_versions="HEAD-232c717"
 # a job (see the teardown shim in %post); %test fails for any other version.
 k2n_teardown_bad_versions="HEAD-232c717"
 
+%files
+# DITTO's BIFROST digital model is built from this at NICOS setup load (niess-ditto's
+# DITTO_MODEL default). A copy of bifrost-workflow-2609's, which is private, so the
+# build could not fetch it; refresh it from there.
+ditto/bifrost_phonon.py /opt/ditto/bifrost_phonon.py
+
 %post
 set -eu
 
@@ -350,6 +356,8 @@ NCrystal binaries:
 	ncrystal-config       - configuration information for the NCrystal installation 
 Cache utilities:
 	splitrun-cache-seed   - Copy this image's mccode-antlr cache somewhere writable and print where
+DITTO:
+	/opt/ditto/bifrost_phonon.py - builds BIFROST's digital model: ditto_model() returns its NeXus structure and instrument
 
 The McCode components and their parsed intermediate representation are built into
 the image, so translating an instrument needs no network. The cache is read-only,
@@ -546,5 +554,13 @@ seeded=$(splitrun-cache-seed -q /tmp/splitrun-cache-seed-test 2>/dev/null)
 test "${seeded}" = "/tmp/splitrun-cache-seed-test" -a -d "${seeded}/mccodeantlr" \
   && echo "yes!" || { echo "no: got '${seeded}'"; test_result=1; }
 rm -rf /tmp/splitrun-cache-seed-test
+
+# The DITTO model builder: that it imports against this image's packages.
+echo -n "Check /opt/ditto/bifrost_phonon.py provides ditto_model ... "
+found=$(cd /tmp && python -c "
+import importlib.util as u
+spec = u.spec_from_file_location('bifrost_phonon', '/opt/ditto/bifrost_phonon.py')
+m = u.module_from_spec(spec); spec.loader.exec_module(m); print(callable(m.ditto_model))" 2>&1 | tail -1)
+test "${found}" = True && echo "yes!" || { echo "no: ${found}"; test_result=1; }
 
 exit ${test_result}
