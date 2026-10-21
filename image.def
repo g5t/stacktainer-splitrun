@@ -178,7 +178,7 @@ echo "export MCCODEANTLR_FLAGS__NCRYSTAL='$(ncrystal-config --show buildflags)'"
 # its own.
 export XDG_CACHE_HOME={{ cache_home }}
 
-# One list, used by both passes. `populate` downloads; `ir-build` only parses what
+# One list, used by both passes. `populate` downloads; `build` only parses what
 # is already on disk, so the same registries must be named to both.
 REGISTRIES="\
  -R mcdotstar/mcstas-chopper-lib@v{{ mcstas_chopper_lib_version }}\
@@ -193,7 +193,12 @@ REGISTRIES="\
  -R mcdotstar/mcstas-transformer@main"
 
 mccode-antlr cache populate --tag {{ mccode_tag }} --flavor mcstas $REGISTRIES
-mccode-antlr cache ir-build -j --tag {{ mccode_tag }} --flavor mcstas $REGISTRIES
+# `build` warms the C typedef cache and, with sidecars switched on, writes the
+# component IR sidecars too -- mccode-antlr leaves those off by default, but a
+# prebuilt read-only cache is exactly what they are for. %environment switches
+# them on at runtime as well, so they are read.
+MCCODEANTLR_CACHE__COMPONENT_IR=true \
+    mccode-antlr cache build -j --tag {{ mccode_tag }} --flavor mcstas $REGISTRIES
 
 # ── splitrun-cache-seed ───────────────────────────────────────────────────────
 # The image cache is read-only. mccode-antlr degrades gracefully against that --
@@ -281,6 +286,8 @@ dnf clean all
 export LC_ALL=C
 export RESTAGE_FIXED=${RESTAGE_FIXED:-''}
 export MCCODEANTLR_MCCODE_POOCH__TAG={{ mccode_tag }}
+# Read the component IR sidecars prebuilt into the image cache (see %post).
+export MCCODEANTLR_CACHE__COMPONENT_IR=${MCCODEANTLR_CACHE__COMPONENT_IR:-true}
 export MPI_COMPILER=openmpi-x86_64
 export LD_LIBRARY_PATH=/usr/lib64/openmpi/lib:/event-formation-unit/lib:/.singularity.d/libs
 export MANPATH=/usr/share/man/openmpi-x86_64:/usr/share/man
