@@ -390,14 +390,10 @@ def make_bifrost_instr(inst, live: bool = False):
     # time from the chopper parameters. The source keeps emitting for about this long
     # after the protons arrive: time to peak brightness + the plateau + some extra.
     #
-    # Planned: an option to emit the source as chopper-lib's `Polygon_ESS_butterfly`
-    # (chopper-lib >= 4.2.1, which niess 0.7.0 already pins), which draws rays only
-    # from the (wavelength, emission-time) region the chopper train can pass instead of
-    # just the band. It is ESS_butterfly plus `choppers`/`chopper_count`, and niess can
-    # publish the train for a component with `export_choppers=`. Two things are missing:
-    # niess publishes `multi_chopper_parameters *` where the component casts its
-    # `choppers` to `chopper_parameters *`, and niess's source emits `ESS_butterfly` with
-    # no way to ask for another type.
+    # niess's PolygonESSModerator (chopper-lib's Polygon_ESS_butterfly) would draw rays only
+    # from the (wavelength, emission-time) region the whole train passes; this call then
+    # publishes the train for it too. polygon_moderator_check.py measures whether it is
+    # faster and statistically equivalent at the sample before it is used here.
     latest = 2.0e-4 + 2.86e-3 + 2e-3
     narrow_source_wavelengths(
         assembler, chopper_train=train_from_instrument(inst, latest_emission=latest),
@@ -416,17 +412,63 @@ def make_bifrost_instr(inst, live: bool = False):
     return instr
 
 
-def ditto_instrument(sample):
-    """The live build with another sample, for a DITTO digital model's `load_sample`."""
-    return make_bifrost_instr(simulated_bifrost(True, sample), True)
+def ditto_instrument(sample, collect: bool = False):
+    """The build a DITTO digital model counts with, around another sample, for its
+    `load_sample`: the live build, or with ``collect`` the collecting one."""
+    return make_bifrost_instr(simulated_bifrost(not collect, sample), not collect)
 
 
-def ditto_model(real_pv_names: bool = False):
-    """The live build for a DITTO digital model's setup: its NeXus structure and the
-    McStas instrument, as `--live` writes them to `bifrost_live.json` and
-    `bifrost_live.instr.json`."""
-    return (to_nexus_structure(bifrost(), True, real_pv_names),
-            make_bifrost_instr(simulated_bifrost(True), True))
+def ditto_model(real_pv_names: bool = False, collect: bool = False):
+    """A DITTO digital model's NeXus structure and McStas instrument.
+
+    The live build, as `--live` writes them to `bifrost_live.json` and
+    `bifrost_live.instr.json`: detector events stream to the EFU while the simulation
+    runs, and the monitors send McStas' histograms. With ``collect``, the build this
+    script writes by default: every detector and monitor is collected, a count replays
+    the point to the EFUs `ditto_efus` describes, and the monitors publish what the beam
+    monitor EFU makes of their events, as the real instrument's do.
+    """
+    live = not collect
+    return (to_nexus_structure(bifrost(), live, real_pv_names),
+            make_bifrost_instr(simulated_bifrost(live), live))
+
+
+#: Where the splitrun image keeps the EFUs, their builds and configurations
+EFU_ROOT = Path('/event-formation-unit')
+
+
+def ditto_efus(directory, address: str = '127.0.0.1') -> dict:
+    """The EFUs a collecting DITTO model replays into, and where to send what.
+
+    Writes the detector EFU's calibration, the beam monitor EFU's configuration and
+    `readout-replay`'s senders into ``directory``, as this script's own run writes them
+    beside the instrument, and returns ``{'efu': [...], 'senders': path}``: the two EFUs
+    as `mp-nexus-services --efu` takes them, and the senders file. The beam monitor EFU
+    reads no calibration, but the services want a file, so it is given its
+    configuration twice, as `services.sh` does.
+    """
+    import json
+    from niess.cbm import efu_config
+
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    calibration = directory / 'bifrost.efu_calibration.json'
+    calibration.write_text(json.dumps(
+        simulated_bifrost().mount_of('tank').content.efu_calibration(), indent=2))
+    monitors = directory / 'bifrost_cbm.json'
+    monitors.write_text(json.dumps(efu_config(bifrost()), indent=2))
+    senders = directory / 'bifrost.senders.json'
+    senders.write_text(json.dumps(replay_senders(address), indent=2))
+    detector_config = EFU_ROOT / 'configs' / 'bifrost' / 'configs' / 'bifrost.json'
+    return {
+        'efu': [
+            f'name:bifrost,binary:{EFU_ROOT}/bin/bifrost,config:{detector_config},'
+            f'calibration:{calibration},topic:bifrost_detector,port:{DETECTOR_EFU_PORT}',
+            f'name:cbm,binary:{EFU_ROOT}/bin/cbm,config:{monitors},calibration:{monitors},'
+            f'topic:bifrost_beam_monitor,port:{MONITOR_EFU_PORT}',
+        ],
+        'senders': str(senders),
+    }
 
 
 def to_nexus_structure(inst, live: bool = False, real_pv_names: bool = False):

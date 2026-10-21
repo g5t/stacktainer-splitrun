@@ -357,7 +357,7 @@ NCrystal binaries:
 Cache utilities:
 	splitrun-cache-seed   - Copy this image's mccode-antlr cache somewhere writable and print where
 DITTO:
-	/opt/ditto/bifrost_phonon.py - builds BIFROST's digital model: ditto_model() returns its NeXus structure and instrument
+	/opt/ditto/bifrost_phonon.py - builds BIFROST's digital model: ditto_model() returns its NeXus structure and instrument; ditto_efus() writes the EFU configs DITTO_COLLECT replays to
 
 The McCode components and their parsed intermediate representation are built into
 the image, so translating an instrument needs no network. The cache is read-only,
@@ -556,11 +556,11 @@ test "${seeded}" = "/tmp/splitrun-cache-seed-test" -a -d "${seeded}/mccodeantlr"
 rm -rf /tmp/splitrun-cache-seed-test
 
 # The DITTO model builder: that it imports against this image's packages.
-echo -n "Check /opt/ditto/bifrost_phonon.py provides ditto_model ... "
+echo -n "Check /opt/ditto/bifrost_phonon.py provides ditto_model and ditto_efus ... "
 found=$(cd /tmp && python -c "
 import importlib.util as u
 spec = u.spec_from_file_location('bifrost_phonon', '/opt/ditto/bifrost_phonon.py')
-m = u.module_from_spec(spec); spec.loader.exec_module(m); print(callable(m.ditto_model))" 2>&1 | tail -1)
+m = u.module_from_spec(spec); spec.loader.exec_module(m); print(callable(m.ditto_model) and callable(m.ditto_efus))" 2>&1 | tail -1)
 test "${found}" = True && echo "yes!" || { echo "no: ${found}"; test_result=1; }
 
 exit ${test_result}
