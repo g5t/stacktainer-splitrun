@@ -23,6 +23,19 @@ jobs:
           apptainer-version: 1.4.1
 
       
+      # Ubuntu 23.10 and later stop unprivileged processes creating user namespaces
+      # unless an AppArmor profile allows the binary; without one, `apptainer build`
+      # fails with "Failed to create mount namespace: mount namespace requires
+      # privileges". The runner is a throwaway VM, so lift the restriction outright.
+      - name: Allow unprivileged user namespaces
+        shell: bash
+        run: |
+          grep PRETTY_NAME /etc/os-release
+          if sysctl -n kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          apptainer --version
+
       - name: Check out
         uses: actions/checkout@v6
 
