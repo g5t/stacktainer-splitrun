@@ -14,44 +14,32 @@ jobs:
       packages: write
     name: Build and Deploy 'Tainer
     if: startsWith(github.ref, 'refs/tags/v')
+    env:
+      IMAGE: oras://ghcr.io/g5t/stacktainer/splitrun
     steps:
+      # Ubuntu 26.04 (ubuntu-latest since November 2026) packages Apptainer.
+      # It also stops unprivileged processes creating user namespaces unless an
+      # AppArmor profile allows the binary; without that, `apptainer build` fails with
+      # "mount namespace requires privileges". The runner is a throwaway VM, so lift
+      # the restriction outright.
       - name: Install Apptainer
-        uses: uw-psych/apptainer-actions/setup@main
-        with:
-          # This step breaks with apptainer 1.4.2
-          # https://github.com/uw-psych/apptainer-actions/issues/1
-          apptainer-version: 1.4.1
-
-      
-      # Ubuntu 23.10 and later stop unprivileged processes creating user namespaces
-      # unless an AppArmor profile allows the binary; without one, `apptainer build`
-      # fails with "Failed to create mount namespace: mount namespace requires
-      # privileges". The runner is a throwaway VM, so lift the restriction outright.
-      - name: Allow unprivileged user namespaces
-        shell: bash
         run: |
-          grep PRETTY_NAME /etc/os-release
-          if sysctl -n kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
-            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          fi
+          sudo apt-get update
+          sudo apt-get install -y apptainer
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           apptainer --version
 
       - name: Check out
         uses: actions/checkout@v6
 
-      - name: Set tag
-        shell: bash
-        run: |
-          export IMAGE_VERSION=${GITHUB_REF_NAME#v}
-          echo "IMAGE_VERSION=${IMAGE_VERSION}" >> "${GITHUB_ENV}"
+      - name: Build
+        run: apptainer build splitrun.sif image.def
 
-      - name: Build and push image
-        uses: uw-psych/apptainer-actions/build-and-push@main
+      - name: Push
         env:
           GITHUB_TOKEN: ${{ secrets.PACKAGE_TOKEN }}
-        with:
-          deffile: image.def
-          image-version: ${{ env.IMAGE_VERSION }}
-          image-url: "oras://ghcr.io/g5t/stacktainer/splitrun:${{ env.IMAGE_VERSION }}"
-          add-tags: "latest"
-          
+        run: |
+          echo "${GITHUB_TOKEN}" | apptainer registry login -u "${GITHUB_ACTOR}" --password-stdin oras://ghcr.io
+          for tag in "${GITHUB_REF_NAME#v}" latest; do
+            apptainer push -U splitrun.sif "${IMAGE}:${tag}"
+          done
