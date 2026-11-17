@@ -2,9 +2,9 @@ Bootstrap: oras
 From: ghcr.io/g5t/stacktainer/ecdc:6.0
 
 %arguments
-mccode_antlr_version="0.36.0"
+mccode_antlr_version="0.37.1"
 plumber_version="0.27.0"
-niess_version="0.16.0"
+niess_version="0.17.1"
 restage_version="0.19.0"
 mcpl_version="2.2.8"
 ncrystal_version="4.4.6"
@@ -174,16 +174,18 @@ export XDG_CACHE_HOME={{ cache_home }}
 
 # One list, used by both passes. `populate` downloads; `build` only parses what
 # is already on disk, so the same registries must be named to both.
+# A cached registry serves only the version it was cached at: those niess pins
+# (niess 0.17.1) must be named at the same versions, or every run fetches them again.
 REGISTRIES="\
  -R mcdotstar/mcstas-chopper-lib@v{{ mcstas_chopper_lib_version }}\
  -R mcdotstar/mccode-mcpl-filter@main\
  -R mcdotstar/mcstas-detector-cubes@main\
- -R mcdotstar/mcstas-detector-tubes@main\
+ -R mcdotstar/mcstas-detector-tubes@v1.0.1\
  -R mcdotstar/mcstas-epics-link@main\
- -R mcdotstar/mcstas-frame-tof-monitor@main\
- -R mcdotstar/mcstas-monochromator-rowland@main\
- -R mcdotstar/mcstas-radial-filter-collimator@main\
- -R mcdotstar/mcstas-slit-radial@main\
+ -R mcdotstar/mcstas-frame-tof-monitor@v1.1.0\
+ -R mcdotstar/mcstas-monochromator-rowland@v1.0.0\
+ -R mcdotstar/mcstas-radial-filter-collimator@v1.0.0\
+ -R mcdotstar/mcstas-slit-radial@v1.0.0\
  -R mcdotstar/mcstas-transformer@main"
 
 mccode-antlr cache populate --tag {{ mccode_tag }} --flavor mcstas $REGISTRIES
