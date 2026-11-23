@@ -3,12 +3,12 @@ From: ghcr.io/g5t/stacktainer/ecdc:6.0
 
 %arguments
 mccode_antlr_version="0.37.1"
-plumber_version="0.27.0"
-niess_version="0.17.1"
+plumber_version="0.28.0"
+niess_version="0.18.0"
 restage_version="0.19.0"
 mcpl_version="2.2.8"
 ncrystal_version="4.4.6"
-readout_version="0.8.1"
+readout_version="0.9.0"
 mccode_tag="v3.8.7"
 mcstas_chopper_lib_version="4.4.1"
 cache_home="/opt/mccodeantlr-cache"
@@ -175,7 +175,7 @@ export XDG_CACHE_HOME={{ cache_home }}
 # One list, used by both passes. `populate` downloads; `build` only parses what
 # is already on disk, so the same registries must be named to both.
 # A cached registry serves only the version it was cached at: those niess pins
-# (niess 0.17.1) must be named at the same versions, or every run fetches them again.
+# (niess 0.18.0) must be named at the same versions, or every run fetches them again.
 REGISTRIES="\
  -R mcdotstar/mcstas-chopper-lib@v{{ mcstas_chopper_lib_version }}\
  -R mcdotstar/mccode-mcpl-filter@main\
